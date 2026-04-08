@@ -184,6 +184,7 @@ ApplicationWindow {
 
     // ================= DATA PAGE =================
     Item {
+        id: dataPage
         anchors.fill: parent
         visible: isConnected
 
@@ -214,6 +215,7 @@ ApplicationWindow {
 
                     Text {
                         id: dataText
+                        width: parent.width
                         text: "Waiting..."
                         wrapMode: Text.Wrap
                         font.pixelSize: 16
@@ -222,48 +224,58 @@ ApplicationWindow {
             }
 
             // ===== SIDE ACTIONS =====
-            Rectangle {
-                Layout.preferredWidth: 200
-                Layout.fillHeight: true
-                radius: 12
-                color: "white"
+	Rectangle {
+	    Layout.preferredWidth: 250
+	    Layout.fillHeight: false
+	    Layout.alignment: Qt.AlignVCenter
+	    height: 300
+	    radius: 12
+	    color: "#DDECFF"
 
-                ColumnLayout {
-                    anchors.fill: parent
-                    anchors.margins: 15
-                    spacing: 15
+	    ColumnLayout {
+		anchors.fill: parent
+		anchors.margins: 20
 
-                    Button {
-                        text: "Disconnect"
-                        Layout.fillWidth: true
-                        background: Rectangle { color: "#f44336"; radius: 8 }
+		// Top Spacer
+		Item { Layout.fillHeight: true }
 
-                        onClicked: {
-                            if (!dataPage.isDisconnected) {
-                                ntripClient.disconnectClient()
-                                dataPage.isDisconnected = true
-                                dataText.text = "Disconnected"
-                            }
-                        }
-                    }
+		Button {
+		    text: "Disconnect"
+		    Layout.fillWidth: true
+		    Layout.preferredHeight: 50
+		    background: Rectangle { color: "#f44336"; radius: 10 }
 
-                    Button {
-                        text: "Back"
-                        Layout.fillWidth: true
-                        background: Rectangle { color: "#9E9E9E"; radius: 8 }
+		    onClicked: {
+		        if (!dataPage.isDisconnected) {
+		            ntripClient.disconnectClient()
+		            dataPage.isDisconnected = true
+		            dataText.text = "Disconnected"
+		        }
+		    }
+		}
 
-                        onClicked: {
-                            if (!dataPage.isDisconnected) {
-                                ntripClient.disconnectClient()
-                                dataPage.isDisconnected = true
-                            }
-                            isConnected = false
-                        }
-                    }
-                }
-            }
+		Button {
+		    text: "Back"
+		    Layout.fillWidth: true
+		    Layout.preferredHeight: 50
+		    background: Rectangle { color: "#9E9E9E"; radius: 10 }
+
+		    onClicked: {
+		        if (!dataPage.isDisconnected) {
+		            ntripClient.disconnectClient()
+		            dataPage.isDisconnected = true
+		        }
+		        isConnected = false
+		    }
+		}
+
+		// Bottom Spacer
+		Item { Layout.fillHeight: true }
+	    }
+	}
         }
     }
+
 
     // ================= BACKEND =================
     Connections {
