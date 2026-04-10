@@ -481,3 +481,145 @@ void* NtripClient::serial_thread(void *arg)
 
     return NULL;
 }
+
+
+
+
+void* NtripClient::ntrip_thread(void *arg)
+{
+    ThreadData *d = (ThreadData*)arg;
+
+    char buf[1024];
+    char gga_line[256];
+    int reconnect_count = 1;
+
+    time_t last_gga_time = 0;
+
+    while (d->running)
+    {
+        // ---------- CREATE REQUEST ----------
+        QString auth = "Basic " + d->auth.toUtf8().toBase64();
+
+        QString req =
+            "GET /" + d->mountpoint + " HTTP/1.1\r\n"
+            "Host: " + d->host + "\r\n"
+            "Authorization: " + auth + "\r\n"
+            "Ntrip-Version: Ntrip/2.0\r\n"
+            "User-Agent: NTRIP QtClient/1.0\r\n"
+            "Connection: keep-alive\r\n\r\n";
+
+        int sock = connect_socket(d->host, d->port, req);
+
+        if (sock < 0)
+        {
+            printf("Connect failed... retrying\n");
+            sleep(2);
+            continue;
+        }
+
+        printf("Connected to caster\n");
+
+        // ---------- READ RESPONSE ----------
+        char resp[512] = {0};
+        int r = read(sock, resp, sizeof(resp)-1);
+
+        if (r <= 0 || !strstr(resp, "200"))
+        {
+            printf("Mountpoint rejected\n");
+            close(sock);
+            sleep(2);
+            continue;
+        }
+
+        printf("Caster accepted connection\n");
+
+        // ---------- SEND INITIAL GGA ----------
+        if (d->useFileGGA)
+        {
+            pthread_mutex_lock(&gga_file_mutex);
+
+            FILE *fp = fopen(d->ggaFilePath.toStdString().c_str(), "r");
+            if (fp)
+            {
+                if (fgets(gga_line, sizeof(gga_line), fp))
+                {
+                    write(sock, gga_line, strlen(gga_line));
+                    printf("Initial GGA sent\n");
+                }
+                fclose(fp);
+            }
+
+            pthread_mutex_unlock(&gga_file_mutex);
+        }
+
+        last_gga_time = time(NULL);
+
+        // ---------- MAIN LOOP ----------
+        while (d->running)
+        {
+            // ===== SEND GGA EVERY 2 SEC =====
+            time_t now = time(NULL);
+
+            if (d->useFileGGA && (now - last_gga_time >= 2))
+            {
+                pthread_mutex_lock(&gga_file_mutex);
+
+                FILE *fp = fopen(d->ggaFilePath.toStdString().c_str(), "r");
+                if (fp)
+                {
+                    if (fgets(gga_line, sizeof(gga_line), fp))
+                    {
+                        write(sock, gga_line, strlen(gga_line));
+                        //printf("GGA sent\n");
+                    }
+                    fclose(fp);
+                }
+
+                pthread_mutex_unlock(&gga_file_mutex);
+
+                last_gga_time = now;
+            }
+
+            // ===== WAIT FOR RTCM (NO FALSE RECONNECT) =====
+            fd_set readfds;
+            struct timeval tv;
+
+            FD_ZERO(&readfds);
+            FD_SET(sock, &readfds);
+
+            tv.tv_sec = 2;
+            tv.tv_usec = 0;
+
+            int ret = select(sock + 1, &readfds, NULL, NULL, &tv);
+
+            if (ret > 0 && FD_ISSET(sock, &readfds))
+            {
+                int n = read(sock, buf, sizeof(buf));
+
+                if (n > 0)
+                {
+                    write(d->serial_fd, buf, n);
+                    printf("RTCM: %d bytes\n", n);
+                }
+                else if (n == 0)
+                {
+                    printf("Caster closed connection\n");
+                    close(sock);
+                    break;
+                }
+            }
+            else if (ret < 0)
+            {
+                printf("Socket error\n");
+                close(sock);
+                break;
+            }
+            // ret == 0 → timeout → NORMAL → do nothing
+        }
+
+        printf("Reconnecting... Attempt: %d\n", reconnect_count++);
+        sleep(2);
+    }
+
+    return NULL;
+}
